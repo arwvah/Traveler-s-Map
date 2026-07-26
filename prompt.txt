@@ -1,0 +1,390 @@
+Prompt: Build "Traveler's Map" Android MVP (Uzbekistan Only)
+
+You are a senior Android engineer, UI/UX designer, and product architect.
+
+Build a production-quality Android application called Traveler's Map.
+
+This is an MVP.
+
+The application must focus ONLY on Uzbekistan.
+
+Do NOT add support for other countries.
+
+The application should be designed in a way that new countries can be added later without rewriting the architecture.
+
+General Design
+
+The design must be extremely modern.
+
+Minimalist.
+
+Black & White.
+
+Inspired by:
+
+Nothing OS
+Apple Maps
+Google Material 3
+Glassmorphism
+
+Use:
+
+translucent cards
+frosted glass effects
+blurred backgrounds
+smooth animations
+rounded corners
+soft shadows
+clean typography
+
+Primary colors:
+
+Black (#000000)
+White (#FFFFFF)
+Gray shades
+
+No colorful interface.
+
+Only tourist places should have accent color.
+
+Authentication
+
+Do NOT build:
+
+Login
+Registration
+Password reset
+Accounts
+
+The application opens directly to the map.
+
+Everything works locally for the MVP.
+
+Technology
+
+Use:
+
+Kotlin
+Jetpack Compose
+Material 3
+Google Maps SDK
+MVVM
+Room Database
+Coroutines
+Flow
+Hilt Dependency Injection
+Navigation Compose
+
+Architecture must be scalable.
+
+Home Screen
+
+When opening the app:
+
+Display a fullscreen Google Map.
+
+The map should automatically center on Uzbekistan.
+
+Tourist Locations
+
+Tourist locations must stand out immediately.
+
+They should be much larger than normal Google Maps markers.
+
+Do NOT show:
+
+gas stations
+repair shops
+banks
+supermarkets
+pharmacies
+random businesses
+
+Only display:
+
+historical places
+monuments
+museums
+mountains
+lakes
+waterfalls
+national parks
+nature reserves
+ancient cities
+UNESCO sites
+famous viewpoints
+mosques
+madrasahs
+fortresses
+palaces
+
+The tourist markers should use custom icons.
+
+When zooming out:
+
+Markers should cluster intelligently.
+
+Initial Database
+
+Include the most famous destinations from:
+
+Tashkent
+
+Samarkand
+
+Bukhara
+
+Khiva
+
+Shahrisabz
+
+Nukus
+
+Termez
+
+Zaamin
+
+Chimgan
+
+Charvak
+
+Nuratau
+
+Aydarkul Lake
+
+Each location should contain:
+
+Name
+Photos
+Description
+History
+Opening hours
+Ticket price
+Estimated visit time
+Best season
+Difficulty
+Family friendly
+Coordinates
+Nearby attractions
+Search
+
+Add search.
+
+Search should instantly filter tourist places.
+
+Support:
+
+City names
+
+Landmarks
+
+Museums
+
+Mosques
+
+Natural attractions
+
+Place Page
+
+Clicking a marker opens a beautiful bottom sheet.
+
+The page should contain:
+
+Large image
+
+Title
+
+Short description
+
+Rating
+
+Gallery
+
+Historical information
+
+Best visiting time
+
+Weather placeholder
+
+Entry fee
+
+Opening hours
+
+Estimated duration
+
+Nearby attractions
+
+Navigation button
+
+Favorite button
+
+Share button
+
+Favorites
+
+Allow saving places.
+
+Store locally using Room Database.
+
+No login required.
+
+Route Planning
+
+User chooses destination.
+
+Show:
+
+Walking
+
+Driving
+
+Cycling
+
+Public transport (placeholder for MVP)
+
+Display:
+
+Distance
+
+Estimated time
+
+AI Travel Planner
+
+Create a dedicated AI screen.
+
+The user can type:
+
+"I have 2 days in Samarkand."
+
+"I want nature."
+
+"I love history."
+
+"I'm traveling with family."
+
+Generate an itinerary.
+
+For MVP:
+
+Use mocked AI responses with clean architecture so a real AI API can easily replace the mock later.
+
+Budget Planner
+
+User inputs:
+
+Budget
+
+Days
+
+Number of travelers
+
+Automatically estimate:
+
+Hotels
+
+Food
+
+Transportation
+
+Tickets
+
+Daily budget
+
+Remaining money
+
+Offline Mode
+
+Cache:
+
+Tourist places
+
+Favorites
+
+Basic information
+
+The app should still work without internet.
+
+Settings
+
+Simple settings page:
+
+Dark Mode (default)
+
+Language:
+
+English
+
+Uzbek
+
+Russian
+
+About
+
+Privacy
+
+App version
+
+Animations
+
+Use smooth animations everywhere.
+
+Examples:
+
+Marker expansion
+
+Bottom sheet transitions
+
+Card fade
+
+Page transitions
+
+Loading skeletons
+
+Micro interactions
+
+Everything should feel premium.
+
+Performance
+
+The app should launch in under 2 seconds.
+
+Use lazy loading.
+
+Optimize image loading.
+
+Keep scrolling at 60 FPS.
+
+Scalability
+
+Design the project so adding another country later only requires adding new datasets, not changing the core architecture.
+
+Folder Structure
+
+Use clean architecture.
+
+app/
+core/
+data/
+domain/
+ui/
+features/
+navigation/
+di/
+database/
+repository/
+models/
+utils/
+Deliverables
+
+Generate:
+
+Complete Android Studio project
+Clean architecture
+Well-commented code
+Reusable components
+Material 3 UI
+Sample Uzbekistan tourism database
+Beautiful glassmorphism design
+Production-ready project structure
+
+The final result should look like a premium travel application that could realistically be published on the Google Play Store as the first MVP of Traveler's Map.
