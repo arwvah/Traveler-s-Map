@@ -12,7 +12,6 @@ data class CountryConfig(
     val defaultZoom: Float
 ) {
     companion object {
-        /** MVP is Uzbekistan-only. */
         val Uzbekistan = CountryConfig(
             code = "UZ",
             name = "Uzbekistan",
@@ -29,6 +28,7 @@ enum class PlaceCategory {
     MUSEUM,
     MOSQUE,
     MADRASAH,
+    MAUSOLEUM,
     FORTRESS,
     PALACE,
     UNESCO,
@@ -38,7 +38,23 @@ enum class PlaceCategory {
     NATIONAL_PARK,
     NATURE_RESERVE,
     ANCIENT_CITY,
-    VIEWPOINT
+    VIEWPOINT,
+    BAZAAR,
+    CRAFT_CENTER,
+    SILK_WORKSHOP,
+    TRADITIONAL_VILLAGE,
+    CULTURAL_COMPLEX,
+    THEME_PARK,
+    BOTANICAL_GARDEN,
+    ZOO,
+    PARK,
+    PILGRIMAGE,
+    SACRED_SPRING,
+    ARCHAEOLOGICAL,
+    RIVER,
+    CANYON,
+    CAVE,
+    FOREST
 }
 
 enum class Difficulty { EASY, MODERATE, HARD }
@@ -48,6 +64,7 @@ data class TouristPlace(
     val countryCode: String,
     val name: String,
     val city: String,
+    val region: String = city,
     val category: PlaceCategory,
     val shortDescription: String,
     val description: String,
@@ -63,7 +80,9 @@ data class TouristPlace(
     val familyFriendly: Boolean,
     val rating: Float,
     val nearbyIds: List<String>,
-    val accentColorHex: Long = 0xFFC9A227 // muted gold accent for tourist pins only
+    val website: String? = null,
+    val phone: String? = null,
+    val accentColorHex: Long = 0xFFC9A227
 )
 
 data class FavoritePlace(
@@ -77,8 +96,39 @@ data class RouteEstimate(
     val mode: TravelMode,
     val distanceKm: Double,
     val durationMinutes: Int,
-    val isPlaceholder: Boolean = false
+    val isPlaceholder: Boolean = false,
+    val polyline: List<LatLngPoint> = emptyList()
 )
+
+data class LatLngPoint(val latitude: Double, val longitude: Double)
+
+data class UserLocation(
+    val latitude: Double,
+    val longitude: Double,
+    val accuracyMeters: Float? = null
+)
+
+data class WeatherInfo(
+    val temperatureC: Double,
+    val feelsLikeC: Double,
+    val humidityPercent: Int,
+    val windSpeedKmh: Double,
+    val condition: String,
+    val conditionCode: Int,
+    val todayHighC: Double,
+    val todayLowC: Double,
+    val todaySummary: String,
+    val fetchedAtMs: Long = System.currentTimeMillis()
+)
+
+data class AiChatMessage(
+    val id: String,
+    val role: AiMessageRole,
+    val content: String,
+    val timestampMs: Long = System.currentTimeMillis()
+)
+
+enum class AiMessageRole { USER, ASSISTANT, SYSTEM }
 
 data class AiItineraryDay(
     val dayNumber: Int,

@@ -8,7 +8,13 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.travelersmap.data.local.FavoriteDao
 import com.travelersmap.data.local.FavoriteEntity
 import com.travelersmap.data.local.PlaceDao
+import com.travelersmap.data.local.RecentlyViewedDao
+import com.travelersmap.data.local.RecentlyViewedEntity
+import com.travelersmap.data.local.WeatherCacheDao
+import com.travelersmap.data.local.WeatherCacheEntity
 import com.travelersmap.data.local.toDomain
+import com.travelersmap.data.remote.DirectionsRemoteDataSource
+import com.travelersmap.data.remote.WeatherRemoteDataSource
 import com.travelersmap.domain.model.AppLanguage
 import com.travelersmap.domain.model.AppSettings
 import com.travelersmap.domain.model.BudgetBreakdown
@@ -16,26 +22,28 @@ import com.travelersmap.domain.model.BudgetInput
 import com.travelersmap.domain.model.RouteEstimate
 import com.travelersmap.domain.model.TouristPlace
 import com.travelersmap.domain.model.TravelMode
+import com.travelersmap.domain.model.WeatherInfo
 import com.travelersmap.domain.repository.BudgetRepository
 import com.travelersmap.domain.repository.FavoriteRepository
 import com.travelersmap.domain.repository.PlaceRepository
 import com.travelersmap.domain.repository.RouteRepository
 import com.travelersmap.domain.repository.SettingsRepository
+import com.travelersmap.domain.repository.WeatherRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 @Singleton
 class PlaceRepositoryImpl @Inject constructor(
-    private val placeDao: PlaceDao
+    private val placeDao: PlaceDao,
+    private val recentlyViewedDao: RecentlyViewedDao
 ) : PlaceRepository {
     override fun observePlaces(countryCode: String): Flow<List<TouristPlace>> =
         placeDao.observeByCountry(countryCode).map { list -> list.map { it.toDomain() } }
@@ -54,6 +62,21 @@ class PlaceRepositoryImpl @Inject constructor(
 
     override suspend fun getAll(countryCode: String): List<TouristPlace> =
         placeDao.getAll(countryCode).map { it.toDomain() }
+
+    override suspend fun markViewed(placeId: String) {
+        recentlyViewedDao.insert(
+            RecentlyViewedEntity(placeId = placeId, viewedAt = System.currentTimeMillis())
+        )
+    }
+
+    override fun observeRecentlyViewed(limit: Int): Flow<List<TouristPlace>> =
+        combine(
+            recentlyViewedDao.observeRecent(limit),
+            placeDao.observeByCountry("UZ")
+        ) { recent, places ->
+            val byId = places.associateBy { it.id }
+            recent.mapNotNull { row -> byId[row.placeId]?.toDomain() }
+        }
 }
 
 @Singleton
@@ -82,39 +105,83 @@ class FavoriteRepositoryImpl @Inject constructor(
 }
 
 @Singleton
-class RouteRepositoryImpl @Inject constructor() : RouteRepository {
+class RouteRepositoryImpl @Inject constructor(
+    private val directions: DirectionsRemoteDataSource,
+    private val mapsApiKey: String
+) : RouteRepository {
+
+    override suspend fun route(
+        fromLat: Double,
+        fromLng: Double,
+        toLat: Double,
+        toLng: Double,
+        mode: TravelMode
+    ): RouteEstimate = withContext(Dispatchers.IO) {
+        directions.route(fromLat, fromLng, toLat, toLng, mode, mapsApiKey)
+    }
+
     override fun estimate(
         fromLat: Double,
         fromLng: Double,
         toLat: Double,
         toLng: Double,
         mode: TravelMode
-    ): RouteEstimate {
-        val km = haversineKm(fromLat, fromLng, toLat, toLng)
-        // Rough road factor for MVP offline estimates
-        val road = km * 1.25
-        return when (mode) {
-            TravelMode.WALKING -> RouteEstimate(mode, road, (road / 5.0 * 60).toInt().coerceAtLeast(1))
-            TravelMode.DRIVING -> RouteEstimate(mode, road, (road / 60.0 * 60).toInt().coerceAtLeast(1))
-            TravelMode.CYCLING -> RouteEstimate(mode, road, (road / 15.0 * 60).toInt().coerceAtLeast(1))
-            TravelMode.TRANSIT -> RouteEstimate(
-                mode,
-                road,
-                (road / 40.0 * 60).toInt().coerceAtLeast(5),
-                isPlaceholder = true
-            )
-        }
-    }
+    ): RouteEstimate = directions.offlineEstimate(fromLat, fromLng, toLat, toLng, mode)
+}
 
-    private fun haversineKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val r = 6371.0
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-            cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-            sin(dLon / 2) * sin(dLon / 2)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return r * c
+@Singleton
+class WeatherRepositoryImpl @Inject constructor(
+    private val remote: WeatherRemoteDataSource,
+    private val cacheDao: WeatherCacheDao
+) : WeatherRepository {
+
+    private val ttlMs = 20 * 60 * 1000L
+
+    override suspend fun weatherFor(lat: Double, lng: Double): WeatherInfo =
+        withContext(Dispatchers.IO) {
+            val key = "%.2f,%.2f".format(lat, lng)
+            val cached = cacheDao.get(key)
+            val now = System.currentTimeMillis()
+            if (cached != null && now - cached.fetchedAtMs < ttlMs) {
+                runCatching { decode(cached.json, cached.fetchedAtMs) }.getOrNull()?.let { return@withContext it }
+            }
+            val fresh = remote.fetch(lat, lng)
+            cacheDao.upsert(
+                WeatherCacheEntity(
+                    cacheKey = key,
+                    json = encode(fresh),
+                    fetchedAtMs = fresh.fetchedAtMs
+                )
+            )
+            fresh
+        }
+
+    private fun encode(w: WeatherInfo): String = JSONObject().apply {
+        put("temperatureC", w.temperatureC)
+        put("feelsLikeC", w.feelsLikeC)
+        put("humidityPercent", w.humidityPercent)
+        put("windSpeedKmh", w.windSpeedKmh)
+        put("condition", w.condition)
+        put("conditionCode", w.conditionCode)
+        put("todayHighC", w.todayHighC)
+        put("todayLowC", w.todayLowC)
+        put("todaySummary", w.todaySummary)
+    }.toString()
+
+    private fun decode(json: String, fetchedAt: Long): WeatherInfo {
+        val o = JSONObject(json)
+        return WeatherInfo(
+            temperatureC = o.getDouble("temperatureC"),
+            feelsLikeC = o.getDouble("feelsLikeC"),
+            humidityPercent = o.getInt("humidityPercent"),
+            windSpeedKmh = o.getDouble("windSpeedKmh"),
+            condition = o.getString("condition"),
+            conditionCode = o.getInt("conditionCode"),
+            todayHighC = o.getDouble("todayHighC"),
+            todayLowC = o.getDouble("todayLowC"),
+            todaySummary = o.getString("todaySummary"),
+            fetchedAtMs = fetchedAt
+        )
     }
 }
 
@@ -123,7 +190,7 @@ class BudgetRepositoryImpl @Inject constructor() : BudgetRepository {
     override fun estimate(input: BudgetInput): BudgetBreakdown {
         val days = input.days.coerceAtLeast(1)
         val people = input.travelers.coerceAtLeast(1)
-        val hotels = 45.0 * days * ((people + 1) / 2) // shared rooms
+        val hotels = 45.0 * days * ((people + 1) / 2)
         val food = 18.0 * days * people
         val transportation = 12.0 * days * people
         val tickets = 8.0 * days * people

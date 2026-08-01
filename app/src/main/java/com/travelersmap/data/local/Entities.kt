@@ -9,6 +9,7 @@ data class TouristPlaceEntity(
     val countryCode: String,
     val name: String,
     val city: String,
+    val region: String,
     val category: String,
     val shortDescription: String,
     val description: String,
@@ -24,6 +25,8 @@ data class TouristPlaceEntity(
     val familyFriendly: Boolean,
     val rating: Float,
     val nearbyIdsCsv: String,
+    val website: String?,
+    val phone: String?,
     val accentColorHex: Long
 )
 
@@ -31,4 +34,23 @@ data class TouristPlaceEntity(
 data class FavoriteEntity(
     @PrimaryKey val placeId: String,
     val savedAt: Long
+)
+
+@Entity(tableName = "recent_searches")
+data class RecentSearchEntity(
+    @PrimaryKey val query: String,
+    val searchedAt: Long
+)
+
+@Entity(tableName = "recently_viewed")
+data class RecentlyViewedEntity(
+    @PrimaryKey val placeId: String,
+    val viewedAt: Long
+)
+
+@Entity(tableName = "weather_cache")
+data class WeatherCacheEntity(
+    @PrimaryKey val cacheKey: String,
+    val json: String,
+    val fetchedAtMs: Long
 )

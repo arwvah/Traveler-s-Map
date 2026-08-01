@@ -1,5 +1,8 @@
 package com.travelersmap.ui.features.map
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,9 +26,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,8 +42,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +55,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -59,6 +65,7 @@ import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.clustering.Clustering
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.travelersmap.ui.components.CachedPlaceImage
 import com.travelersmap.ui.components.LoadingSkeleton
 import com.travelersmap.ui.components.PlaceMetaLine
 import com.travelersmap.ui.components.RatingStars
@@ -79,6 +86,55 @@ fun MapHomeScreen(
         position = CameraPosition.fromLatLngZoom(center, state.country.defaultZoom)
     }
     val scope = rememberCoroutineScope()
+    var didInitialCenter by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        vm.onPermissionResult(granted)
+    }
+
+    LaunchedEffect(Unit) {
+        if (!state.locationPermissionGranted) {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
+
+    // Center near user once when first fix arrives.
+    LaunchedEffect(state.userLocation, state.locationPermissionGranted) {
+        val loc = state.userLocation
+        if (!didInitialCenter && state.locationPermissionGranted && loc != null) {
+            didInitialCenter = true
+            camera.animate(
+                CameraUpdateFactory.newLatLngZoom(
+                    LatLng(loc.latitude, loc.longitude),
+                    11f
+                )
+            )
+        }
+    }
+
+    // Recenter when My Location FAB is tapped.
+    LaunchedEffect(state.centerOnUserToken) {
+        if (state.centerOnUserToken == 0) return@LaunchedEffect
+        val loc = state.userLocation
+        if (loc != null) {
+            camera.animate(
+                CameraUpdateFactory.newLatLngZoom(
+                    LatLng(loc.latitude, loc.longitude),
+                    14f
+                )
+            )
+        }
+    }
+
     val uiSettings = remember {
         MapUiSettings(
             zoomControlsEnabled = false,
@@ -87,14 +143,14 @@ fun MapHomeScreen(
             myLocationButtonEnabled = false
         )
     }
-    val mapProperties = remember {
+    val mapProperties = remember(state.locationPermissionGranted) {
         MapProperties(
             mapType = MapType.NORMAL,
-            isBuildingEnabled = true
+            isBuildingEnabled = true,
+            isMyLocationEnabled = state.locationPermissionGranted
         )
     }
 
-    // Map always shows full tourist catalog; search list is filtered separately.
     val clusterItems = remember(state.allPlaces) {
         state.allPlaces.map { PlaceClusterItem(it) }
     }
@@ -110,7 +166,6 @@ fun MapHomeScreen(
             uiSettings = uiSettings,
             onMapClick = { vm.select(null) }
         ) {
-            // Large custom tourist pins + intelligent clustering when zoomed out.
             Clustering(
                 items = clusterItems,
                 onClusterClick = { cluster ->
@@ -143,7 +198,6 @@ fun MapHomeScreen(
             )
         }
 
-        // Top glass search
         Column(
             Modifier
                 .fillMaxWidth()
@@ -195,6 +249,7 @@ fun MapHomeScreen(
                         LazyColumn(contentPadding = PaddingValues(8.dp)) {
                             items(state.places, key = { it.id }) { place ->
                                 SearchRow(place.name, place.city) {
+                                    vm.rememberSearch(state.query)
                                     onSearchSelect(place.id)
                                     vm.onQueryChange("")
                                 }
@@ -205,22 +260,30 @@ fun MapHomeScreen(
             }
         }
 
-        // Mini glass card (visible when sheet not used / quick glance)
-        AnimatedVisibility(
-            visible = selectedPlace != null,
+        FloatingActionButton(
+            onClick = {
+                if (!state.locationPermissionGranted) {
+                    permissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
+                } else {
+                    vm.centerOnUser()
+                }
+            },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(16.dp),
-            enter = fadeIn() + slideInVertically { it / 2 },
-            exit = fadeOut() + slideOutVertically { it / 2 }
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 72.dp),
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            contentColor = TouristAccent
         ) {
-            // Spacer so country badge doesn't clash; sheet carries detail.
-            Spacer(Modifier.height(1.dp))
+            Icon(Icons.Outlined.MyLocation, contentDescription = "My Location")
         }
 
-        // Country badge
         Text(
-            text = "Uzbekistan · offline catalog",
+            text = "Uzbekistan · ${state.allPlaces.size} places",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             modifier = Modifier
@@ -232,7 +295,6 @@ fun MapHomeScreen(
         )
     }
 
-    // Place preview bottom sheet (full detail via Open)
     if (selectedPlace != null) {
         ModalBottomSheet(
             onDismissRequest = { vm.select(null) },
@@ -253,7 +315,6 @@ fun MapHomeScreen(
         }
     }
 
-    // Keep sheet in sync if selection cleared externally
     LaunchedEffect(state.selectedId) {
         if (state.selectedId == null) {
             runCatching { sheetState.hide() }
@@ -275,8 +336,8 @@ private fun PlacePreviewSheet(
     ) {
         val url = place.photoUrls.firstOrNull()
         if (url != null) {
-            AsyncImage(
-                model = url,
+            CachedPlaceImage(
+                url = url,
                 contentDescription = place.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

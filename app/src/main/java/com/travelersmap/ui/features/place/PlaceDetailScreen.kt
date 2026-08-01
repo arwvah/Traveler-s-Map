@@ -1,12 +1,9 @@
 package com.travelersmap.ui.features.place
 
 import android.content.Intent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,10 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -26,6 +21,9 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Navigation
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.WbCloudy
+import androidx.compose.material.icons.outlined.Air
+import androidx.compose.material.icons.outlined.Thermostat
+import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -33,26 +31,27 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.travelersmap.domain.model.TouristPlace
+import com.travelersmap.domain.model.WeatherInfo
 import com.travelersmap.ui.components.EmptyState
+import com.travelersmap.ui.components.GalleryThumb
+import com.travelersmap.ui.components.HeroImageCarousel
 import com.travelersmap.ui.components.LoadingSkeleton
 import com.travelersmap.ui.components.PlaceMetaLine
 import com.travelersmap.ui.components.RatingStars
 import com.travelersmap.ui.components.SectionLabel
+import com.travelersmap.ui.components.ShimmerBlock
 import com.travelersmap.ui.theme.GlassCard
 import com.travelersmap.ui.theme.TouristAccent
 
@@ -71,10 +70,14 @@ fun PlaceDetailRoute(
             place = state.place!!,
             nearby = state.nearby,
             isFavorite = state.isFavorite,
+            weather = state.weather,
+            weatherLoading = state.weatherLoading,
+            weatherError = state.weatherError,
             onBack = onBack,
             onToggleFavorite = vm::toggleFavorite,
             onNavigate = { onNavigate(state.place!!.id) },
-            onOpenNearby = onOpenNearby
+            onOpenNearby = onOpenNearby,
+            onRetryWeather = vm::retryWeather
         )
     }
 }
@@ -85,10 +88,14 @@ fun PlaceDetailScreen(
     place: TouristPlace,
     nearby: List<TouristPlace>,
     isFavorite: Boolean,
+    weather: WeatherInfo?,
+    weatherLoading: Boolean,
+    weatherError: String?,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
     onNavigate: () -> Unit,
-    onOpenNearby: (String) -> Unit
+    onOpenNearby: (String) -> Unit,
+    onRetryWeather: () -> Unit
 ) {
     val context = LocalContext.current
     Scaffold(
@@ -133,39 +140,19 @@ fun PlaceDetailScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
         ) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(240.dp)
-            ) {
-                val url = place.photoUrls.firstOrNull()
-                if (url != null) {
-                    AsyncImage(
-                        model = url,
-                        contentDescription = place.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    )
-                }
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(ColorTransparent, MaterialTheme.colorScheme.background)
-                            )
-                        )
-                )
-            }
+            HeroImageCarousel(
+                urls = place.photoUrls,
+                placeName = place.name,
+                height = 260.dp
+            )
 
             Column(Modifier.padding(horizontal = 20.dp)) {
-                Text(place.name, style = MaterialTheme.typography.displayLarge.copy(fontSize = MaterialTheme.typography.headlineMedium.fontSize))
+                Text(
+                    place.name,
+                    style = MaterialTheme.typography.displayLarge.copy(
+                        fontSize = MaterialTheme.typography.headlineMedium.fontSize
+                    )
+                )
                 Spacer(Modifier.height(4.dp))
                 PlaceMetaLine(place)
                 Spacer(Modifier.height(6.dp))
@@ -181,7 +168,10 @@ fun PlaceDetailScreen(
                         Text("Navigate")
                     }
                     FilledTonalButton(onClick = onToggleFavorite, modifier = Modifier.weight(1f)) {
-                        Icon(if (isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder, null)
+                        Icon(
+                            if (isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                            null
+                        )
                         Spacer(Modifier.width(8.dp))
                         Text(if (isFavorite) "Saved" else "Save")
                     }
@@ -189,6 +179,22 @@ fun PlaceDetailScreen(
 
                 Spacer(Modifier.height(20.dp))
                 InfoGrid(place)
+
+                val contactBits = listOfNotNull(
+                    place.website?.let { "Web · $it" },
+                    place.phone?.let { "Phone · $it" }
+                )
+                if (contactBits.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    contactBits.forEach { line ->
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                }
 
                 Spacer(Modifier.height(20.dp))
                 SectionLabel("History")
@@ -198,39 +204,27 @@ fun PlaceDetailScreen(
                 SectionLabel("About")
                 Text(place.description, style = MaterialTheme.typography.bodyMedium)
 
-                Spacer(Modifier.height(20.dp))
-                SectionLabel("Weather")
-                GlassCard(modifier = Modifier.fillMaxWidth(), corner = 16.dp) {
-                    Row(
-                        Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Outlined.WbCloudy, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            "Weather placeholder — connect a weather API later.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
                 if (place.photoUrls.size > 1) {
                     Spacer(Modifier.height(20.dp))
                     SectionLabel("Gallery")
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         place.photoUrls.forEach { u ->
-                            AsyncImage(
-                                model = u,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(120.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                            )
+                            GalleryThumb(url = u)
                         }
                     }
                 }
+
+                Spacer(Modifier.height(20.dp))
+                SectionLabel("Weather")
+                WeatherCard(
+                    weather = weather,
+                    loading = weatherLoading,
+                    error = weatherError,
+                    onRetry = onRetryWeather
+                )
 
                 if (nearby.isNotEmpty()) {
                     Spacer(Modifier.height(20.dp))
@@ -257,6 +251,91 @@ fun PlaceDetailScreen(
 }
 
 @Composable
+private fun WeatherCard(
+    weather: WeatherInfo?,
+    loading: Boolean,
+    error: String?,
+    onRetry: () -> Unit
+) {
+    GlassCard(modifier = Modifier.fillMaxWidth(), corner = 16.dp) {
+        when {
+            loading && weather == null -> {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ShimmerBlock(Modifier.fillMaxWidth().height(28.dp))
+                    ShimmerBlock(Modifier.fillMaxWidth(0.7f).height(16.dp))
+                    ShimmerBlock(Modifier.fillMaxWidth().height(48.dp))
+                }
+            }
+            weather != null -> {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.WbCloudy, null, tint = TouristAccent)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${weather.temperatureC.toInt()}°C · ${weather.condition}",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Text(
+                                weather.todaySummary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        WeatherChip(
+                            Icons.Outlined.Thermostat,
+                            "Feels ${weather.feelsLikeC.toInt()}°"
+                        )
+                        WeatherChip(
+                            Icons.Outlined.WaterDrop,
+                            "${weather.humidityPercent}%"
+                        )
+                        WeatherChip(
+                            Icons.Outlined.Air,
+                            "${weather.windSpeedKmh.toInt()} km/h"
+                        )
+                    }
+                    Text(
+                        "High ${weather.todayHighC.toInt()}° · Low ${weather.todayLowC.toInt()}°",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            else -> {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        error ?: "Weather unavailable",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = onRetry) { Text("Retry") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeatherChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String
+) {
+    GlassCard(modifier = Modifier, corner = 12.dp) {
+        Row(
+            Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, null, modifier = Modifier.height(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
 private fun InfoGrid(place: TouristPlace) {
     val items = listOf(
         "Opening hours" to place.openingHours,
@@ -272,7 +351,11 @@ private fun InfoGrid(place: TouristPlace) {
                 row.forEach { (label, value) ->
                     GlassCard(modifier = Modifier.weight(1f), corner = 14.dp) {
                         Column(Modifier.padding(12.dp)) {
-                            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             Spacer(Modifier.height(4.dp))
                             Text(value, style = MaterialTheme.typography.bodyMedium)
                         }
@@ -283,5 +366,3 @@ private fun InfoGrid(place: TouristPlace) {
         }
     }
 }
-
-private val ColorTransparent = androidx.compose.ui.graphics.Color.Transparent

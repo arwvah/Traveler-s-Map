@@ -1,54 +1,57 @@
-# Traveler's Map (MVP)
+# Traveler's Map
 
-Premium **Uzbekistan-only** travel map for Android.
+Premium **Uzbekistan** travel map for Android (Kotlin · Jetpack Compose · Material 3 · MVVM).
 
 ## Stack
 
-- Kotlin · Jetpack Compose · Material 3
-- Google Maps SDK (maps-compose)
-- Room · Hilt · Coroutines/Flow · Navigation Compose
-- Clean architecture (scalable country datasets)
+- Google Maps SDK (maps-compose) + marker clustering
+- Room · Hilt · Coroutines/Flow · Navigation Compose · Coil · OkHttp
+- Open-Meteo weather · Google Directions (optional) · Groq Llama AI
 
 ## Open in Android Studio
 
 1. **File → Open** → this folder
 2. Wait for Gradle sync
-3. Add a Maps key in `local.properties`:
+3. Add keys in `local.properties`:
 
 ```properties
-MAPS_API_KEY=YOUR_KEY_HERE
+MAPS_API_KEY=YOUR_GOOGLE_MAPS_KEY
+GROQ_API_KEY=YOUR_GROQ_KEY
 ```
 
-Or set `MAPS_API_KEY` in `gradle.properties`.
+See `local.properties.example`.
 
 4. Run on an emulator/device with Google Play services
 
-## Features (MVP)
+**Note:** Catalog lives in `app/src/main/assets/uzbekistan_attractions.json` (v3+, 650+ places). Room auto-reseeds when the asset `version` is newer than the last import, or when place count is under 200. After pulling catalog fixes, just relaunch the app (clear data only if pins look stale).
 
-- Fullscreen map centered on Uzbekistan
-- Large gold tourist pins (Compose custom) + intelligent clustering (zoom out → cluster bubbles, tap to expand)
-- Search (city / landmark / category), place preview bottom sheet + full place page
-- Favorites stored in Room (offline, no login)
-- Route modes (walk / drive / cycle + transit placeholder)
-- Mock AI travel planner (swap-ready `AiTravelPlanner` interface)
-- Budget planner
-- Settings: dark mode default, EN / UZ / RU preference, about, privacy
-- Offline seed catalog of famous Uzbekistan sites
+## Features
+
+- Fullscreen map with gold tourist pins + clustering
+- Live GPS (permission), blue location dot, **My Location** FAB
+- Search by name / city / region / category across 650+ attractions
+- Place pages: hero image carousel, gallery, history, meta, favorites
+- **Navigate**: live route from GPS, distance/time/mode, map polyline, **Start Navigation** (Google Maps)
+- **Weather** card per place (Open-Meteo, short Room cache)
+- **AI planner** via Groq `llama-3.3-70b-versatile` (chat history + streaming; falls back if no key)
+- Favorites, budget planner, settings (dark mode, EN/UZ/RU preference)
+- Attractions stored in `app/src/main/assets/uzbekistan_attractions.json` (not hardcoded)
 
 ## Architecture
 
 ```
-app/
-  core/          theme, design system
-  data/          Room, repositories, seed data
-  domain/        models, use cases, AI interface
-  ui/features/   map, search, place, favorites, ai, budget, settings, routes
+app/src/main/java/com/travelersmap/
+  data/       Room, remote APIs, seed loader, repositories, Groq AI
+  domain/     models, repository interfaces, AiTravelPlanner
+  ui/         map, place, route, AI, favorites, budget, settings
+  di/         Hilt modules
   navigation/
-  di/
 ```
 
-Adding another country later = new dataset seed + country config, not a rewrite.
+## Regenerating the catalog
 
-## Note
+```bash
+python scripts/generate_attractions.py
+```
 
-No login/accounts — opens directly to the map. All MVP data is local.
+Writes `app/src/main/assets/uzbekistan_attractions.json`.
