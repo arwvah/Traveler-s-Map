@@ -55,3 +55,9 @@ python scripts/generate_attractions.py
 ```
 
 Writes `app/src/main/assets/uzbekistan_attractions.json`.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
+
+Third-party components retain their respective licenses.
